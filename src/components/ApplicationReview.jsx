@@ -50,11 +50,20 @@ class ApplicationReview extends React.Component {
           plateNumber: "ABC-123",
         },
 
+        payment: {
+          method: "mobile_money",
+          amount: "50.00",
+          reference: "MP123456789",
+          status: "verified",
+          date: "2024-12-20 09:30:00",
+        },
+
         documents: [
           { name: "Vehicle Registration Certificate", status: "verified" },
           { name: "National ID Copy", status: "verified" },
           { name: "Purchase Agreement", status: "pending" },
           { name: "Insurance Certificate", status: "verified" },
+          { name: "Payment Receipt", status: "verified" },
         ],
 
         description: "Selling my vehicle to a family member. All documents are in order and ready for transfer.",
@@ -111,6 +120,19 @@ class ApplicationReview extends React.Component {
         return "bg-yellow-100 text-yellow-800"
       case "low":
         return "bg-green-100 text-green-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  getPaymentStatusColor = (status) => {
+    switch (status) {
+      case "verified":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "failed":
+        return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -258,6 +280,44 @@ class ApplicationReview extends React.Component {
                         </div>
                       </div>
 
+                      {/* Payment Information */}
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4">💳 Payment Information</h3>
+                        <div className="grid md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium">Payment Method</p>
+                            <p className="text-sm text-gray-600">
+                              {application.payment.method === "mobile_money" && "📱 Mobile Money"}
+                              {application.payment.method === "bank_transfer" && "🏦 Bank Transfer"}
+                              {application.payment.method === "credit_card" && "💳 Credit Card"}
+                              {application.payment.method === "cash" && "💵 Cash Payment"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">Amount</p>
+                            <p className="text-sm text-gray-600">${application.payment.amount}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">Reference</p>
+                            <p className="text-sm text-gray-600">{application.payment.reference}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">Payment Status</p>
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-medium ${this.getPaymentStatusColor(application.payment.status)}`}
+                            >
+                              {application.payment.status}
+                            </span>
+                          </div>
+                          <div className="md:col-span-2">
+                            <p className="text-sm font-medium">Payment Date</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(application.payment.date).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Additional Information */}
                       <div>
                         <h3 className="text-lg font-semibold mb-4">📝 Additional Information</h3>
@@ -392,6 +452,18 @@ class ApplicationReview extends React.Component {
                     <span className="text-sm font-medium">Documents:</span>
                     <span className="text-sm">{application.documents.length} files</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Payment:</span>
+                    <span className="text-sm">${application.payment.amount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium">Payment Status:</span>
+                    <span
+                      className={`px-1 py-0.5 rounded text-xs font-medium ${this.getPaymentStatusColor(application.payment.status)}`}
+                    >
+                      {application.payment.status}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -416,5 +488,4 @@ class ApplicationReview extends React.Component {
   }
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export default withRouter(ApplicationReview)

@@ -10,6 +10,7 @@ import AdminDashboard from "./components/AdminDashboard"
 import ApplicationForm from "./components/ApplicationForm"
 import ApplicationReview from "./components/ApplicationReview"
 import ProtectedRoute from "./components/ProtectedRoute"
+import CourtOrderRequest from "./components/CourtOrderRequest"
 
 class App extends React.Component {
   render() {
@@ -34,9 +35,17 @@ class App extends React.Component {
                 }
               />
               <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={["user"]}>
+                    <UserDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/staff-dashboard"
                 element={
-                  <ProtectedRoute allowedRoles={["staff"]}>
+                  <ProtectedRoute allowedRoles={["staff", "admin"]}>
                     <StaffDashboard />
                   </ProtectedRoute>
                 }
@@ -62,6 +71,14 @@ class App extends React.Component {
                 element={
                   <ProtectedRoute allowedRoles={["staff", "admin"]}>
                     <ApplicationReview />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/court-order-request"
+                element={
+                  <ProtectedRoute allowedRoles={["user"]}>
+                    <CourtOrderRequest />
                   </ProtectedRoute>
                 }
               />

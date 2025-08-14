@@ -55,14 +55,51 @@ class LandingPage extends React.Component {
             </p>
             <div className="flex justify-center space-x-4">
               <Link
-                to="/login/user"
+                to="/login"
                 className="px-8 py-3 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700"
               >
-                Get Started →
+                Login to Your Account →
               </Link>
               <button className="px-8 py-3 border border-gray-300 rounded-md font-medium text-gray-700 hover:bg-gray-50">
                 Learn More
               </button>
+            </div>
+            
+            {/* Role-based Quick Access */}
+            <div className="mt-12">
+              <p className="text-sm text-gray-500 mb-4">Quick Access by Role:</p>
+              <div className="flex justify-center space-x-6">
+                <Link
+                  to="/login"
+                  className="flex flex-col items-center p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-green-600 text-xl">👤</span>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">User Portal</span>
+                  <span className="text-xs text-gray-500">Submit Applications</span>
+                </Link>
+                <Link
+                  to="/login"
+                  className="flex flex-col items-center p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-blue-600 text-xl">👥</span>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">Staff Portal</span>
+                  <span className="text-xs text-gray-500">Review & Process</span>
+                </Link>
+                <Link
+                  to="/login"
+                  className="flex flex-col items-center p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-purple-600 text-xl">⚙️</span>
+                  </div>
+                  <span className="text-sm font-medium text-gray-900">Admin Portal</span>
+                  <span className="text-xs text-gray-500">System Management</span>
+                </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -78,7 +115,7 @@ class LandingPage extends React.Component {
                 <span className="font-bold">Online Ownership Change System</span>
               </div>
               <p className="text-gray-400 mb-4">A comprehensive digital platform for secure ownership transfers</p>
-              <p className="text-gray-400">&copy; 2024 Online Ownership Change System. All rights reserved.</p>
+              <p className="text-gray-400">&copy; 2025 Online Ownership Change System. All rights reserved.</p>
             </div>
           </div>
         </footer>

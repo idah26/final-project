@@ -2,6 +2,8 @@
 
 import React from "react"
 import { Link, Navigate } from "react-router-dom"
+import { registerUser } from "../utils/api"
+
 
 class RegisterPage extends React.Component {
   constructor(props) {
@@ -17,24 +19,39 @@ class RegisterPage extends React.Component {
         nationalId: "",
         password: "",
         confirmPassword: "",
-        role: "user",
+        role: "USER",
+        staffIdCard: "",
+        adminIdCard: "",
       },
       error: "",
       loading: false,
       redirectToLogin: false,
+      success: "",
     }
   }
 
   handleInputChange = (field, value) => {
-    this.setState({
-      formData: {
-        ...this.state.formData,
-        [field]: value,
-      },
-    })
+    // Clear ID card fields when role changes
+    if (field === "role") {
+      this.setState({
+        formData: {
+          ...this.state.formData,
+          [field]: value,
+          staffIdCard: "",
+          adminIdCard: "",
+        },
+      })
+    } else {
+      this.setState({
+        formData: {
+          ...this.state.formData,
+          [field]: value,
+        },
+      })
+    }
   }
 
-  handleSubmit = (e) => {
+  handleSubmit = async (e) => {
     e.preventDefault()
     const { formData } = this.state
 
@@ -43,26 +60,71 @@ class RegisterPage extends React.Component {
       return
     }
 
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.phone || !formData.nationalId || !formData.password) {
+      this.setState({ error: "Please fill in all required fields" })
+      return
+    }
+
+    // Additional validation for staff and admin roles
+    if (formData.role === "STAFF" && !formData.staffIdCard) {
+      this.setState({ error: "Staff ID card number is required for staff registration" })
+      return
+    }
+
+    if (formData.role === "ADMIN" && !formData.adminIdCard) {
+      this.setState({ error: "Admin ID card number is required for admin registration" })
+      return
+    }
+
     this.setState({ loading: true, error: "" })
 
-    // Simulate registration
-    setTimeout(() => {
-      // Store user data
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          email: formData.email,
-          role: formData.role,
-          name: `${formData.firstName} ${formData.lastName}`,
-        }),
-      )
+    try {
+      // Prepare data to match your RegisterRequest DTO
+      const data = {
+        firstName: this.state.formData.firstName,
+        lastName: this.state.formData.lastName,
+        email: this.state.formData.email,
+        phone: this.state.formData.phone,
+        nationalId: this.state.formData.nationalId,
+        password: this.state.formData.password,
+        role: this.state.formData.role,
+        staffIdCard: this.state.formData.staffIdCard || null,
+        adminIdCard: this.state.formData.adminIdCard || null
+      };
 
-      this.setState({ loading: false, redirectToLogin: true })
-    }, 1000)
+      await registerUser(data)
+      
+      // Show appropriate success message based on role
+      if (data.role === "USER") {
+        this.setState({ loading: false, redirectToLogin: true })
+      } else {
+        this.setState({ 
+          loading: false, 
+          error: "", 
+          redirectToLogin: false,
+          success: `${data.role.toLowerCase()} registration submitted for approval. You will be notified once verified.`
+        })
+        // Redirect to login after 3 seconds
+        setTimeout(() => {
+          this.setState({ redirectToLogin: true })
+        }, 3000)
+      }
+    } catch (error) {
+      console.error('Registration error:', error)
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      })
+      this.setState({ 
+        loading: false, 
+        error: error.message || "Registration failed. Please try again." 
+      })
+    }
   }
 
   render() {
-    const { showPassword, showConfirmPassword, formData, error, loading, redirectToLogin } = this.state
+    const { showPassword, showConfirmPassword, formData, error, loading, redirectToLogin, success } = this.state
 
     if (redirectToLogin) {
       return <Navigate to="/login" replace />
@@ -86,6 +148,12 @@ class RegisterPage extends React.Component {
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3">
                   <p className="text-red-800 text-sm">{error}</p>
+                </div>
+              )}
+
+              {success && (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <p className="text-green-800 text-sm">{success}</p>
                 </div>
               )}
 
@@ -146,6 +214,58 @@ class RegisterPage extends React.Component {
                   />
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Role</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => this.handleInputChange("role", e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="USER">User</option>
+                  <option value="STAFF">Staff</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+                <p className="text-xs text-gray-500">
+                  Choose &ldquo;Staff&rdquo; for administrative privileges or &ldquo;Admin&rdquo; for full system access. Additional verification required for elevated roles.
+                </p>
+              </div>
+
+              {/* Conditional ID Card Fields */}
+              {formData.role === "STAFF" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Staff ID Card Number</label>
+                  <input
+                    type="text"
+                    placeholder="Enter your staff ID card number"
+                    value={formData.staffIdCard}
+                    onChange={(e) => this.handleInputChange("staffIdCard", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <p className="text-xs text-gray-500">
+                    Staff ID card number is required for verification. Registration will be pending approval.
+                  </p>
+                </div>
+              )}
+
+              {formData.role === "ADMIN" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Admin ID Card Number</label>
+                  <input
+                    type="text"
+                    placeholder="Enter your admin ID card number"
+                    value={formData.adminIdCard}
+                    onChange={(e) => this.handleInputChange("adminIdCard", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <p className="text-xs text-gray-500">
+                    Admin ID card number is required for verification. Registration will be pending approval.
+                  </p>
+                </div>
+              )}
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">

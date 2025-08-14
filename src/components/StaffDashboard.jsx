@@ -1,9 +1,10 @@
-/* eslint-disable no-case-declarations */
+/* eslint-disable no-unused-vars */
 "use client"
 
 import React from "react"
 import { Link } from "react-router-dom"
 import AuthContext from "../context/AuthContext"
+import { getAllApplications, updateApplicationStatus } from "../utils/api"
 
 class StaffDashboard extends React.Component {
   static contextType = AuthContext
@@ -11,77 +12,64 @@ class StaffDashboard extends React.Component {
   constructor(props) {
     super(props)
     this.state = {
-      applications: [
-        {
-          id: "OWN-001",
-          type: "Vehicle",
-          asset: "Toyota Corolla - ABC 123",
-          applicant: "John Doe",
-          status: "pending",
-          date: "2024-12-20",
-          priority: "high",
-          lastUpdated: "2024-12-20 10:30:00",
-          assignedTo: "Current User",
-        },
-        {
-          id: "OWN-002",
-          type: "Property",
-          asset: "House - Plot 456, Zanzibar",
-          applicant: "Jane Smith",
-          status: "under_review",
-          date: "2024-12-19",
-          priority: "medium",
-          lastUpdated: "2024-12-19 14:15:00",
-          assignedTo: "Current User",
-        },
-        {
-          id: "OWN-003",
-          type: "Electronics",
-          asset: "iPhone 15 Pro - Serial: ABC123",
-          applicant: "Mike Johnson",
-          status: "pending",
-          date: "2024-12-18",
-          priority: "low",
-          lastUpdated: "2024-12-18 09:45:00",
-          assignedTo: "Other Staff",
-        },
-        {
-          id: "OWN-004",
-          type: "Vehicle",
-          asset: "Honda Civic - XYZ 789",
-          applicant: "Sarah Wilson",
-          status: "approved",
-          date: "2024-12-17",
-          priority: "medium",
-          lastUpdated: "2024-12-17 16:20:00",
-          assignedTo: "Current User",
-        },
-      ],
+      applications: [],
       filterStatus: "all",
       filterPriority: "all",
       sortBy: "date",
       sortOrder: "desc",
+      loading: true,
       success: "",
       error: "",
     }
   }
 
+  componentDidMount() {
+    this.loadApplications()
+  }
+
+  loadApplications = async () => {
+    try {
+      const response = await getAllApplications()
+      const applications = response.data.map(app => ({
+        id: app.id,
+        applicantName: app.applicantName,
+        vehiclePlate: app.vehiclePlateNumber,
+        vehicleMake: app.vehicleMake,
+        vehicleModel: app.vehicleModel,
+        currentOwner: app.currentOwner,
+        newOwner: app.newOwner,
+        status: app.status,
+        submittedDate: app.submittedDate,
+        paymentStatus: app.paymentStatus,
+        courtOrderRequired: app.courtOrderRequired,
+        priority: app.courtOrderRequired ? 'high' : 'medium',
+        lastUpdated: new Date().toLocaleString()
+      }))
+      
+      this.setState({
+        applications,
+        loading: false,
+        error: ""
+      })
+    } catch (err) {
+      this.setState({
+        error: "Failed to load applications",
+        loading: false,
+        applications: []
+      })
+    }
+  }
+
   // Update application status
   updateApplicationStatus = (applicationId, newStatus) => {
-    this.setState({
-      applications: this.state.applications.map((app) =>
+    this.setState((prevState) => ({
+      applications: prevState.applications.map((app) =>
         app.id === applicationId
-          ? {
-              ...app,
-              status: newStatus,
-              lastUpdated: new Date().toLocaleString(),
-            }
-          : app,
+          ? { ...app, status: newStatus, lastUpdated: new Date().toLocaleString() }
+          : app
       ),
       success: `Application ${applicationId} status updated to ${newStatus.replace("_", " ")}`,
-    })
-
-    // Clear success message after 3 seconds
+    }))
     setTimeout(() => this.setState({ success: "" }), 3000)
   }
 
@@ -129,11 +117,12 @@ class StaffDashboard extends React.Component {
           aValue = new Date(a.date)
           bValue = new Date(b.date)
           break
-        case "priority":
+        case "priority": {
           const priorityOrder = { high: 3, medium: 2, low: 1 }
           aValue = priorityOrder[a.priority]
           bValue = priorityOrder[b.priority]
           break
+        }
         case "status":
           aValue = a.status
           bValue = b.status
@@ -181,6 +170,19 @@ class StaffDashboard extends React.Component {
     }
   }
 
+  getPaymentStatusColor = (status) => {
+    switch (status) {
+      case "verified":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "failed":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
   render() {
     const { user, logout } = this.context
     const { applications, filterStatus, filterPriority, sortBy, sortOrder, success, error } = this.state
@@ -197,16 +199,18 @@ class StaffDashboard extends React.Component {
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Staff Dashboard</h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-2xl font-bold text-gray-900">Staff Dashboard</h1>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">👥 Staff</span>
+              </div>
               <div className="flex items-center space-x-4">
                 <button className="p-2 text-gray-400 hover:text-gray-600">🔔</button>
                 <div className="flex items-center space-x-2">
                   <span className="text-gray-600">👤</span>
                   <span className="text-sm font-medium">{user?.name}</span>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Staff</span>
                 </div>
-                <button onClick={logout} className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">
-                  🚪 Logout
+                                <button onClick={logout} className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">
+                  Logout
                 </button>
               </div>
             </div>
@@ -343,8 +347,44 @@ class StaffDashboard extends React.Component {
             </div>
 
             <div className="p-6">
-              <div className="space-y-4">
-                {filteredApplications.map((app) => (
+              {this.state.loading ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">⏳</div>
+                  <p className="text-gray-600">Loading applications...</p>
+                </div>
+              ) : this.state.error ? (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">❌</div>
+                  <p className="text-red-600 mb-4">{this.state.error}</p>
+                  <button 
+                    onClick={this.loadApplications}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : filteredApplications.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📋</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Applications Found</h3>
+                  <p className="text-gray-600">
+                    {this.state.applications.length === 0 
+                      ? "There are no applications to review yet." 
+                      : "No applications match your current filters."
+                    }
+                  </p>
+                  {this.state.applications.length > 0 && (
+                    <button 
+                      onClick={() => this.setState({ filterStatus: 'all', filterPriority: 'all' })}
+                      className="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredApplications.map((app) => (
                   <div key={app.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center space-x-3">
@@ -370,13 +410,27 @@ class StaffDashboard extends React.Component {
                         <span className={`px-2 py-1 rounded text-xs font-medium ${this.getStatusColor(app.status)}`}>
                           {app.status.replace("_", " ")}
                         </span>
+                        {app.payment && (
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-medium ${this.getPaymentStatusColor(app.payment.status)}`}
+                          >
+                            💳 {app.payment.status}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">
-                        Submitted: {new Date(app.date).toLocaleDateString()}
-                      </span>
+                      <div>
+                        <span className="text-sm text-gray-500">
+                          Submitted: {new Date(app.date).toLocaleDateString()}
+                        </span>
+                        {app.payment && (
+                          <span className="text-sm text-gray-500 ml-4">
+                            💳 Payment: ${app.payment.amount} via {app.payment.method.replace("_", " ")}
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex space-x-2">
                         {/* Quick Action Buttons */}
@@ -445,15 +499,8 @@ class StaffDashboard extends React.Component {
                     </div>
                   </div>
                 ))}
-
-                {filteredApplications.length === 0 && (
-                  <div className="text-center py-12">
-                    <div className="text-4xl mb-4">📄</div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Applications Found</h3>
-                    <p className="text-gray-500">No applications match your current filters.</p>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

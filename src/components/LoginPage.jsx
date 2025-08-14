@@ -1,19 +1,36 @@
-"use client"
+/* eslint-disable react/no-unescaped-entities */
+/* eslint-disable no-unused-vars */
+/* eslint-disable react/prop-types */
 
-import React from "react"
-import { Link, useParams, Navigate } from "react-router-dom"
+
+import React, { Component } from "react"
+import { Link, useParams, useNavigate } from "react-router-dom"
 import AuthContext from "../context/AuthContext"
 
-// Higher-order component to inject router params into class component
+
+// HOC to pass router params and navigation to class component
 function withRouter(Component) {
-  function ComponentWithRouterProp(props) {
+  return function WrappedComponent(props) {
     const params = useParams()
-    return <Component {...props} params={params} />
+    const navigate = useNavigate()
+    return <Component {...props} params={params} navigate={navigate} />
   }
-  return ComponentWithRouterProp
 }
 
-class LoginPage extends React.Component {
+class LoginPage extends Component {
+  componentDidUpdate(prevProps, prevState) {
+    const { user, getDefaultRoute } = this.context
+    console.log("[LoginPage] componentDidUpdate", { justLoggedIn: this.state.justLoggedIn, user })
+    const { navigate } = this.props
+    
+    // Only navigate if justLoggedIn is true
+    if (this.state.justLoggedIn && user) {
+      const redirectPath = getDefaultRoute()
+      navigate(redirectPath, { replace: true })
+      // Reset flag so it doesn't keep navigating
+      this.setState({ justLoggedIn: false })
+    }
+  }
   static contextType = AuthContext
 
   constructor(props) {
@@ -24,47 +41,12 @@ class LoginPage extends React.Component {
       showPassword: false,
       error: "",
       loading: false,
-      redirectTo: null,
+      justLoggedIn: false,
     }
   }
 
   handleInputChange = (field, value) => {
     this.setState({ [field]: value })
-  }
-
-  handleSubmit = (e) => {
-    e.preventDefault()
-    const { email, password } = this.state
-    const selectedRole = this.props.params?.role || "user"
-
-    if (!email || !password) {
-      this.setState({ error: "Please fill in all fields" })
-      return
-    }
-
-    this.setState({ loading: true, error: "" })
-
-    // Simulate API call
-    setTimeout(() => {
-      const { login } = this.context
-      login(email, password, selectedRole)
-      this.setState({ loading: false })
-
-      // Navigate based on role
-      switch (selectedRole) {
-        case "admin":
-          this.setState({ redirectTo: "/admin-dashboard" })
-          break
-        case "staff":
-          this.setState({ redirectTo: "/staff-dashboard" })
-          break
-        case "user":
-          this.setState({ redirectTo: "/user-dashboard" })
-          break
-        default:
-          this.setState({ redirectTo: "/user-dashboard" })
-      }
-    }, 1000)
   }
 
   getRoleDisplayName = (role) => {
@@ -74,35 +56,45 @@ class LoginPage extends React.Component {
       case "staff":
         return "Staff Member"
       case "user":
-        return "User"
       default:
         return "User"
     }
   }
 
+  handleSubmit = async (e) => {
+    console.log("[LoginPage] handleSubmit called")
+    e.preventDefault()
+    const { email, password } = this.state
+    const { navigate } = this.props
+    const { login } = this.context
+
+    if (!email || !password) {
+      this.setState({ error: "Please fill in all fields" })
+      return
+    }
+
+    this.setState({ loading: true, error: "" })
+
+    try {
+      // Use the real loginUser API
+      const { loginUser } = await import('../utils/api')
+      const response = await loginUser(email, password)
+      
+      // Login successful - use the user data from backend
+      login(response.data)
+      this.setState({ justLoggedIn: true, loading: false, error: "" })
+    } catch (error) {
+      // Login failed
+      this.setState({ 
+        loading: false, 
+        error: error.message || "Invalid email or password. Please check your credentials and try again." 
+      })
+    }
+  }
+
   render() {
-    const { user } = this.context
-    const { email, password, showPassword, error, loading, redirectTo } = this.state
+    const { email, password, showPassword, error, loading } = this.state
     const selectedRole = this.props.params?.role || "user"
-
-    // Redirect if already logged in
-    if (user) {
-      switch (user.role) {
-        case "admin":
-          return <Navigate to="/admin-dashboard" replace />
-        case "staff":
-          return <Navigate to="/staff-dashboard" replace />
-        case "user":
-          return <Navigate to="/user-dashboard" replace />
-        default:
-          return <Navigate to="/user-dashboard" replace />
-      }
-    }
-
-    // Redirect after successful login
-    if (redirectTo) {
-      return <Navigate to={redirectTo} replace />
-    }
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -196,4 +188,5 @@ class LoginPage extends React.Component {
   }
 }
 
-export default withRouter(LoginPage)
+const LoginPageWithRouter = withRouter(LoginPage)
+export default LoginPageWithRouter

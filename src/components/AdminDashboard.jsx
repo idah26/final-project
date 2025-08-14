@@ -1,8 +1,8 @@
-/* eslint-disable no-unused-vars */
 "use client"
 
 import React from "react"
 import AuthContext from "../context/AuthContext"
+import { getAllApplications, getAllUsers, createUser, updateUser, deleteUser, toggleUserStatus } from "../utils/api"
 
 class AdminDashboard extends React.Component {
   static contextType = AuthContext
@@ -12,46 +12,16 @@ class AdminDashboard extends React.Component {
     this.state = {
       activeTab: "overview",
       systemStats: {
-        totalUsers: 1250,
-        totalApplications: 3420,
-        pendingApplications: 45,
-        approvedApplications: 3200,
-        rejectedApplications: 175,
-        activeStaff: 12,
+        totalUsers: 0,
+        totalApplications: 0,
+        pendingApplications: 0,
+        approvedApplications: 0,
+        rejectedApplications: 0,
+        activeStaff: 0,
       },
       // User Management State
-      users: [
-        {
-          id: 1,
-          name: "John Doe",
-          email: "john.doe@email.com",
-          role: "user",
-          status: "active",
-          phone: "+255 123 456 789",
-          nationalId: "123456789",
-          joinDate: "2024-01-15",
-        },
-        {
-          id: 2,
-          name: "Jane Smith",
-          email: "jane.smith@email.com",
-          role: "staff",
-          status: "active",
-          phone: "+255 987 654 321",
-          nationalId: "987654321",
-          joinDate: "2024-02-20",
-        },
-        {
-          id: 3,
-          name: "Mike Johnson",
-          email: "mike.johnson@email.com",
-          role: "user",
-          status: "inactive",
-          phone: "+255 555 123 456",
-          nationalId: "555123456",
-          joinDate: "2024-03-10",
-        },
-      ],
+      users: [],
+      applications: [],
       showAddUserModal: false,
       showEditUserModal: false,
       selectedUser: null,
@@ -74,33 +44,60 @@ class AdminDashboard extends React.Component {
         passwordPolicy: "medium",
         maxLoginAttempts: 5,
       },
-      // Backup State
-      backupHistory: [
-        {
-          id: 1,
-          date: "2024-12-20 02:00:00",
-          type: "Automatic",
-          size: "2.5 GB",
-          status: "completed",
-        },
-        {
-          id: 2,
-          date: "2024-12-19 02:00:00",
-          type: "Automatic",
-          size: "2.4 GB",
-          status: "completed",
-        },
-        {
-          id: 3,
-          date: "2024-12-18 14:30:00",
-          type: "Manual",
-          size: "2.4 GB",
-          status: "completed",
-        },
-      ],
+      // Backup State - Clean initial state
+      backupHistory: [],
       loading: false,
       success: "",
       error: "",
+    }
+  }
+
+  componentDidMount() {
+    // Load mock data
+    this.loadDashboardData()
+  }
+
+  loadDashboardData = async () => {
+    try {
+      // Get all users and applications
+      const usersResponse = await getAllUsers()
+      const applicationsResponse = await getAllApplications()
+      
+      const users = usersResponse.data
+      const applications = applicationsResponse.data
+      
+      // Calculate statistics
+      const stats = {
+        totalUsers: users.length,
+        totalApplications: applications.length,
+        pendingApplications: applications.filter(app => app.status === 'pending').length,
+        approvedApplications: applications.filter(app => app.status === 'approved').length,
+        rejectedApplications: applications.filter(app => app.status === 'rejected').length,
+        activeStaff: users.filter(user => user.role === 'staff').length,
+      }
+      
+      this.setState({
+        users,
+        applications,
+        systemStats: stats,
+        loading: false
+      })
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error)
+      this.setState({ 
+        error: 'Failed to load dashboard data', 
+        loading: false,
+        users: [],
+        applications: [],
+        systemStats: {
+          totalUsers: 0,
+          totalApplications: 0,
+          pendingApplications: 0,
+          approvedApplications: 0,
+          rejectedApplications: 0,
+          activeStaff: 0,
+        }
+      })
     }
   }
 
@@ -121,46 +118,74 @@ class AdminDashboard extends React.Component {
     })
   }
 
-  handleDeleteUser = (userId) => {
+  handleDeleteUser = async (userId) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
-      this.setState({
-        users: this.state.users.filter((user) => user.id !== userId),
-        success: "User deleted successfully",
-      })
-      setTimeout(() => this.setState({ success: "" }), 3000)
+      try {
+        await deleteUser(userId)
+        
+        // Refresh the users list
+        const usersResponse = await getAllUsers()
+        this.setState({
+          users: usersResponse.data,
+          success: "User deleted successfully",
+        })
+        setTimeout(() => this.setState({ success: "" }), 3000)
+      } catch (error) {
+        this.setState({ 
+          error: error.message || "Failed to delete user" 
+        })
+        setTimeout(() => this.setState({ error: "" }), 5000)
+      }
     }
   }
 
-  handleSaveUser = () => {
-    const { newUser, users, selectedUser } = this.state
+  handleSaveUser = async () => {
+    const { newUser, selectedUser } = this.state
 
     if (!newUser.name || !newUser.email || !newUser.phone || !newUser.nationalId) {
       this.setState({ error: "Please fill in all required fields" })
       return
     }
 
-    this.setState({ loading: true })
+    if (!selectedUser && !newUser.password) {
+      this.setState({ error: "Password is required for new users" })
+      return
+    }
 
-    setTimeout(() => {
+    this.setState({ loading: true, error: "" })
+
+    try {
       if (selectedUser) {
-        // Edit existing user
-        this.setState({
-          users: users.map((user) => (user.id === selectedUser.id ? { ...newUser, id: selectedUser.id } : user)),
-          success: "User updated successfully",
-        })
-      } else {
-        // Add new user
-        const newUserWithId = {
-          ...newUser,
-          id: Date.now(),
-          joinDate: new Date().toISOString().split("T")[0],
-          status: "active",
+        // Update existing user
+        const userData = {
+          name: newUser.name,
+          email: newUser.email,
+          phone: newUser.phone,
+          nationalId: newUser.nationalId,
+          role: newUser.role
         }
-        this.setState({
-          users: [...users, newUserWithId],
-          success: "User added successfully",
-        })
+
+        await updateUser(selectedUser.id, userData)
+      } else {
+        // Create new user
+        const userData = {
+          name: newUser.name,
+          email: newUser.email,
+          phone: newUser.phone,
+          nationalId: newUser.nationalId,
+          password: newUser.password,
+          role: newUser.role
+        }
+
+        await createUser(userData)
       }
+      
+      // Refresh the users list
+      const usersResponse = await getAllUsers()
+      this.setState({
+        users: usersResponse.data,
+        success: selectedUser ? "User updated successfully" : "User added successfully",
+      })
 
       this.setState({
         showAddUserModal: false,
@@ -175,21 +200,38 @@ class AdminDashboard extends React.Component {
           password: "",
         },
         loading: false,
-        error: "",
       })
 
       setTimeout(() => this.setState({ success: "" }), 3000)
-    }, 1000)
+    } catch (error) {
+      this.setState({
+        loading: false,
+        error: error.message || "Failed to save user",
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
   }
 
-  handleToggleUserStatus = (userId) => {
-    this.setState({
-      users: this.state.users.map((user) =>
-        user.id === userId ? { ...user, status: user.status === "active" ? "inactive" : "active" } : user,
-      ),
-      success: "User status updated successfully",
-    })
-    setTimeout(() => this.setState({ success: "" }), 3000)
+  handleToggleUserStatus = async (userId) => {
+    try {
+      const user = this.state.users.find(u => u.id === userId)
+      const newStatus = user.status === "active" ? "inactive" : "active"
+      
+      await toggleUserStatus(userId, newStatus)
+      
+      // Refresh the users list
+      const usersResponse = await getAllUsers()
+      this.setState({
+        users: usersResponse.data,
+        success: "User status updated successfully",
+      })
+      setTimeout(() => this.setState({ success: "" }), 3000)
+    } catch (error) {
+      this.setState({ 
+        error: error.message || "Failed to update user status" 
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
   }
 
   // System Settings Functions
@@ -202,21 +244,34 @@ class AdminDashboard extends React.Component {
     })
   }
 
-  handleSaveSettings = () => {
+  handleSaveSettings = async () => {
     this.setState({ loading: true })
-    setTimeout(() => {
+    try {
+      // This would call backend API to save settings
+      // await updateSystemSettings(this.state.systemSettings)
+      
       this.setState({
         loading: false,
         success: "Settings saved successfully",
       })
       setTimeout(() => this.setState({ success: "" }), 3000)
-    }, 1000)
+    } catch (error) {
+      this.setState({
+        loading: false,
+        error: error.message || "Failed to save settings",
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
   }
 
   // Backup Functions
-  handleManualBackup = () => {
+  handleManualBackup = async () => {
     this.setState({ loading: true })
-    setTimeout(() => {
+    try {
+      // This would call backend API to create backup
+      // const backup = await createSystemBackup()
+      
+      // Mock backup data - would come from backend
       const newBackup = {
         id: Date.now(),
         date: new Date().toLocaleString(),
@@ -224,25 +279,42 @@ class AdminDashboard extends React.Component {
         size: "2.5 GB",
         status: "completed",
       }
+      
       this.setState({
         backupHistory: [newBackup, ...this.state.backupHistory],
         loading: false,
         success: "Manual backup completed successfully",
       })
       setTimeout(() => this.setState({ success: "" }), 3000)
-    }, 3000)
+    } catch (error) {
+      this.setState({
+        loading: false,
+        error: error.message || "Backup failed",
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
   }
 
-  handleRestoreBackup = (backupId) => {
+  handleRestoreBackup = async (backupId) => {
     if (window.confirm("Are you sure you want to restore from this backup? This action cannot be undone.")) {
       this.setState({ loading: true })
-      setTimeout(() => {
+      try {
+        // This would call backend API to restore backup
+        // await restoreSystemBackup(backupId)
+        console.log('Restoring backup:', backupId)
+        
         this.setState({
           loading: false,
           success: "System restored successfully",
         })
         setTimeout(() => this.setState({ success: "" }), 3000)
-      }, 2000)
+      } catch (error) {
+        this.setState({
+          loading: false,
+          error: error.message || "Restore failed",
+        })
+        setTimeout(() => this.setState({ error: "" }), 5000)
+      }
     }
   }
 
@@ -285,16 +357,18 @@ class AdminDashboard extends React.Component {
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm font-medium rounded-full">🛡️ Administrator</span>
+              </div>
               <div className="flex items-center space-x-4">
                 <button className="p-2 text-gray-400 hover:text-gray-600">🔔</button>
                 <div className="flex items-center space-x-2">
                   <span className="text-gray-600">🛡️</span>
                   <span className="text-sm font-medium">{user?.name}</span>
-                  <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">Administrator</span>
                 </div>
                 <button onClick={logout} className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50">
-                  🚪 Logout
+                  Logout
                 </button>
               </div>
             </div>
@@ -335,7 +409,7 @@ class AdminDashboard extends React.Component {
                 <span className="text-purple-600">📄</span>
                 <h3 className="text-sm font-medium">Applications</h3>
               </div>
-              <div className="text-2xl font-bold text-purple-600">{systemStats.totalApplications.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-purple-600">{systemStats.totalApplications}</div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -351,9 +425,7 @@ class AdminDashboard extends React.Component {
                 <span className="text-green-600">✅</span>
                 <h3 className="text-sm font-medium">Approved</h3>
               </div>
-              <div className="text-2xl font-bold text-green-600">
-                {systemStats.approvedApplications.toLocaleString()}
-              </div>
+              <div className="text-2xl font-bold text-green-600">{systemStats.approvedApplications}</div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -402,15 +474,15 @@ class AdminDashboard extends React.Component {
                       <div className="space-y-3">
                         <div className="flex justify-between">
                           <span className="text-sm">Application Success Rate</span>
-                          <span className="font-medium">94.2%</span>
+                          <span className="font-medium">--</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm">Average Processing Time</span>
-                          <span className="font-medium">2.3 days</span>
+                          <span className="font-medium">--</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm">User Satisfaction</span>
-                          <span className="font-medium">4.7/5</span>
+                          <span className="font-medium">--</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm">System Uptime</span>
@@ -421,28 +493,9 @@ class AdminDashboard extends React.Component {
 
                     <div className="bg-gray-50 p-6 rounded-lg">
                       <h3 className="text-lg font-semibold mb-4">📈 Recent Activity</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-start space-x-3">
-                          <span className="text-green-600">✅</span>
-                          <div className="text-sm">
-                            <p className="font-medium">Application OWN-001 approved</p>
-                            <p className="text-gray-500">2 minutes ago</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                          <span className="text-blue-600">👤</span>
-                          <div className="text-sm">
-                            <p className="font-medium">New user registered: Sarah Wilson</p>
-                            <p className="text-gray-500">15 minutes ago</p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                          <span className="text-yellow-600">⚠️</span>
-                          <div className="text-sm">
-                            <p className="font-medium">High priority application pending</p>
-                            <p className="text-gray-500">1 hour ago</p>
-                          </div>
-                        </div>
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-4">📊</div>
+                        <p className="text-gray-500">No recent activity to display</p>
                       </div>
                     </div>
                   </div>
@@ -462,83 +515,99 @@ class AdminDashboard extends React.Component {
                   </div>
 
                   {/* Users Table */}
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white border border-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            User
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Contact
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Role
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Status
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Join Date
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {users.map((user) => (
-                          <tr key={user.id}>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                                <div className="text-sm text-gray-500">{user.email}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">{user.phone}</div>
-                              <div className="text-sm text-gray-500">ID: {user.nationalId}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2 py-1 text-xs font-medium rounded ${this.getRoleColor(user.role)}`}>
-                                {user.role}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`px-2 py-1 text-xs font-medium rounded ${this.getUserStatusColor(user.status)}`}
-                              >
-                                {user.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {new Date(user.joinDate).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                              <button
-                                onClick={() => this.handleEditUser(user)}
-                                className="text-blue-600 hover:text-blue-900"
-                              >
-                                ✏️ Edit
-                              </button>
-                              <button
-                                onClick={() => this.handleToggleUserStatus(user.id)}
-                                className="text-yellow-600 hover:text-yellow-900"
-                              >
-                                {user.status === "active" ? "🚫 Deactivate" : "✅ Activate"}
-                              </button>
-                              <button
-                                onClick={() => this.handleDeleteUser(user.id)}
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                🗑️ Delete
-                              </button>
-                            </td>
+                  {users.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white border border-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              User
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Contact
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Role
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Join Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {users.map((user) => (
+                            <tr key={user.id}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                                  <div className="text-sm text-gray-500">{user.email}</div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">{user.phone}</div>
+                                <div className="text-sm text-gray-500">ID: {user.nationalId}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`px-2 py-1 text-xs font-medium rounded ${this.getRoleColor(user.role)}`}
+                                >
+                                  {user.role}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span
+                                  className={`px-2 py-1 text-xs font-medium rounded ${this.getUserStatusColor(user.status)}`}
+                                >
+                                  {user.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {new Date(user.joinDate).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                <button
+                                  onClick={() => this.handleEditUser(user)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  onClick={() => this.handleToggleUserStatus(user.id)}
+                                  className="text-yellow-600 hover:text-yellow-900"
+                                >
+                                  {user.status === "active" ? "🚫 Deactivate" : "✅ Activate"}
+                                </button>
+                                <button
+                                  onClick={() => this.handleDeleteUser(user.id)}
+                                  className="text-red-600 hover:text-red-900"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-4xl mb-4">👥</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Users Found</h3>
+                      <p className="text-gray-500 mb-4">No users have been registered yet.</p>
+                      <button
+                        onClick={this.handleAddUser}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        ➕ Add First User
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -552,7 +621,8 @@ class AdminDashboard extends React.Component {
                   </div>
                   <div className="text-center py-12">
                     <div className="text-4xl mb-4">📄</div>
-                    <p className="text-gray-500">Application management interface would be implemented here</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Applications Yet</h3>
+                    <p className="text-gray-500">Applications will appear here once users start submitting them.</p>
                   </div>
                 </div>
               )}
@@ -568,7 +638,7 @@ class AdminDashboard extends React.Component {
                           <label className="block text-sm font-medium mb-1">System Name</label>
                           <input
                             type="text"
-                            defaultValue="SUZA Ownership System"
+                            defaultValue="Online Ownership Change System"
                             className="w-full px-3 py-2 border border-gray-300 rounded"
                           />
                         </div>
@@ -717,42 +787,53 @@ class AdminDashboard extends React.Component {
                     <div className="p-4 border-b">
                       <h4 className="font-medium">📋 Backup History</h4>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {backupHistory.map((backup) => (
-                            <tr key={backup.id}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.date}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.type}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.size}</td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
-                                  {backup.status}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                <button className="text-blue-600 hover:text-blue-900">📥 Download</button>
-                                <button
-                                  onClick={() => this.handleRestoreBackup(backup.id)}
-                                  className="text-orange-600 hover:text-orange-900"
-                                >
-                                  🔄 Restore
-                                </button>
-                              </td>
+                    {backupHistory.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                Status
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                Actions
+                              </th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {backupHistory.map((backup) => (
+                              <tr key={backup.id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.date}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.type}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{backup.size}</td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
+                                    {backup.status}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                  <button className="text-blue-600 hover:text-blue-900">📥 Download</button>
+                                  <button
+                                    onClick={() => this.handleRestoreBackup(backup.id)}
+                                    className="text-orange-600 hover:text-orange-900"
+                                  >
+                                    🔄 Restore
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="text-4xl mb-4">💾</div>
+                        <p className="text-gray-500">No backup history available</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

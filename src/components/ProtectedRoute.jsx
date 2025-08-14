@@ -7,8 +7,9 @@ class ProtectedRoute extends React.Component {
   static contextType = AuthContext
 
   render() {
-    const { user, loading } = this.context
-    const { children, allowedRoles } = this.props
+    const { user, loading, hasPermission } = this.context
+    const { children, allowedRoles, element } = this.props
+    console.log("[ProtectedRoute]", { user, allowedRoles, children, element })
 
     if (loading) {
       return (
@@ -25,11 +26,16 @@ class ProtectedRoute extends React.Component {
       return <Navigate to="/login" replace />
     }
 
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-      return <Navigate to="/" replace />
+    // Use the hasPermission method from AuthContext for role checking
+    if (allowedRoles && !hasPermission(allowedRoles)) {
+      // Redirect to appropriate dashboard based on user role
+      const { getDefaultRoute } = this.context
+      return <Navigate to={getDefaultRoute()} replace />
     }
 
-    return children
+    console.log('[ProtectedRoute] returning children/element', { children, element })
+    // Prefer children if present, else element
+    return children || element || null
   }
 }
 
