@@ -77,7 +77,7 @@ class App extends React.Component {
               <Route
                 path="/court-order-request"
                 element={
-                  <ProtectedRoute allowedRoles={["user"]}>
+                  <ProtectedRoute allowedRoles={["user", "staff", "admin"]}>
                     <CourtOrderRequest />
                   </ProtectedRoute>
                 }
