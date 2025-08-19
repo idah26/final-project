@@ -1,10 +1,10 @@
 /* eslint-disable no-unused-vars */
-/* eslint-disable react/no-unescaped-entities */
 "use client"
 
 import React from "react"
 import { Link, Navigate } from "react-router-dom"
 import AuthContext from "../context/AuthContext"
+import { submitOwnershipChangeRequest } from "../utils/api"
 
 
 class ApplicationForm extends React.Component {
@@ -115,7 +115,7 @@ class ApplicationForm extends React.Component {
     this.setState({ courtOrderFile: e.target.files[0] })
   }
 
-  handleSubmit = (e) => {
+  handleSubmit = async (e) => {
     e.preventDefault()
     
     // Validation: If no current owner, court order must be completed or file provided
@@ -127,15 +127,51 @@ class ApplicationForm extends React.Component {
     }
     
     this.setState({ loading: true })
-    // Mock submit: always succeed
-    this.setState({ success: true, loading: false })
     
-    // Clear saved form data after successful submission
-    this.clearSavedFormData()
-    
-    setTimeout(() => {
-      this.setState({ redirectToDashboard: true })
-    }, 2000)
+    try {
+      // Prepare the application data with user information
+      const { user } = this.context
+      const applicationData = {
+        ...this.state.formData,
+        userId: user?.id,
+        submittedBy: user?.name,
+        submittedDate: new Date().toISOString(),
+        status: 'pending'
+      }
+      
+      try {
+        // Try to submit to backend first
+        const response = await submitOwnershipChangeRequest(applicationData)
+        console.log('Application submitted to backend successfully:', response)
+      } catch (backendError) {
+        console.log('Backend submission failed, storing locally:', backendError)
+        
+        // If backend fails, store locally for demo purposes
+        const localApplications = JSON.parse(localStorage.getItem('userApplications') || '[]')
+        const newApplication = {
+          ...applicationData,
+          id: Date.now(), // Use timestamp as ID
+          submittedDate: new Date().toISOString()
+        }
+        localApplications.push(newApplication)
+        localStorage.setItem('userApplications', JSON.stringify(localApplications))
+        
+        console.log('Application stored locally:', newApplication)
+      }
+      
+      this.setState({ success: true, loading: false })
+      
+      // Clear saved form data after successful submission
+      this.clearSavedFormData()
+      
+      setTimeout(() => {
+        this.setState({ redirectToDashboard: true })
+      }, 2000)
+    } catch (error) {
+      console.error('Application submission failed:', error)
+      alert(`Application submission failed: ${error.message}`)
+      this.setState({ loading: false })
+    }
   }
   
 

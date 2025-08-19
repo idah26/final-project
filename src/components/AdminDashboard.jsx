@@ -59,33 +59,41 @@ class AdminDashboard extends React.Component {
 
   loadDashboardData = async () => {
     try {
+      this.setState({ loading: true })
+      
       // Get all users and applications
       const usersResponse = await getAllUsers()
       const applicationsResponse = await getAllApplications()
       
-      const users = usersResponse.data
-      const applications = applicationsResponse.data
+      console.log('Admin dashboard - Users:', usersResponse.data)
+      console.log('Admin dashboard - Applications:', applicationsResponse.data)
+      
+      const users = usersResponse.data || []
+      const applications = applicationsResponse.data || []
       
       // Calculate statistics
       const stats = {
         totalUsers: users.length,
         totalApplications: applications.length,
-        pendingApplications: applications.filter(app => app.status === 'pending').length,
-        approvedApplications: applications.filter(app => app.status === 'approved').length,
-        rejectedApplications: applications.filter(app => app.status === 'rejected').length,
-        activeStaff: users.filter(user => user.role === 'staff').length,
+        pendingApplications: applications.filter(app => (app.status || 'pending').toLowerCase() === 'pending').length,
+        approvedApplications: applications.filter(app => (app.status || '').toLowerCase() === 'approved').length,
+        rejectedApplications: applications.filter(app => (app.status || '').toLowerCase() === 'rejected').length,
+        activeStaff: users.filter(user => user.role === 'staff' && user.status === 'active').length,
       }
+      
+      console.log('Admin dashboard - Statistics:', stats)
       
       this.setState({
         users,
         applications,
         systemStats: stats,
-        loading: false
+        loading: false,
+        error: ""
       })
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
       this.setState({ 
-        error: 'Failed to load dashboard data', 
+        error: `Failed to load dashboard data: ${error.message}`, 
         loading: false,
         users: [],
         applications: [],
@@ -335,6 +343,36 @@ class AdminDashboard extends React.Component {
     }
   }
 
+  getApplicationStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "under_review":
+        return "bg-blue-100 text-blue-800"
+      case "approved":
+        return "bg-green-100 text-green-800"
+      case "rejected":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  getPaymentStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case "verified":
+      case "completed":
+        return "bg-green-100 text-green-800"
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "failed":
+      case "rejected":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
   render() {
     const { user, logout } = this.context
     const {
@@ -401,7 +439,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-blue-600">👥</span>
                 <h3 className="text-sm font-medium">Total Users</h3>
               </div>
-              <div className="text-2xl font-bold text-blue-600">{users.length}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {loading ? "..." : systemStats.totalUsers}
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -409,7 +449,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-purple-600">📄</span>
                 <h3 className="text-sm font-medium">Applications</h3>
               </div>
-              <div className="text-2xl font-bold text-purple-600">{systemStats.totalApplications}</div>
+              <div className="text-2xl font-bold text-purple-600">
+                {loading ? "..." : systemStats.totalApplications}
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -417,7 +459,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-yellow-600">⏱️</span>
                 <h3 className="text-sm font-medium">Pending</h3>
               </div>
-              <div className="text-2xl font-bold text-yellow-600">{systemStats.pendingApplications}</div>
+              <div className="text-2xl font-bold text-yellow-600">
+                {loading ? "..." : systemStats.pendingApplications}
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -425,7 +469,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-green-600">✅</span>
                 <h3 className="text-sm font-medium">Approved</h3>
               </div>
-              <div className="text-2xl font-bold text-green-600">{systemStats.approvedApplications}</div>
+              <div className="text-2xl font-bold text-green-600">
+                {loading ? "..." : systemStats.approvedApplications}
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -433,7 +479,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-red-600">❌</span>
                 <h3 className="text-sm font-medium">Rejected</h3>
               </div>
-              <div className="text-2xl font-bold text-red-600">{systemStats.rejectedApplications}</div>
+              <div className="text-2xl font-bold text-red-600">
+                {loading ? "..." : systemStats.rejectedApplications}
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-lg shadow">
@@ -441,7 +489,9 @@ class AdminDashboard extends React.Component {
                 <span className="text-indigo-600">👨‍💼</span>
                 <h3 className="text-sm font-medium">Active Staff</h3>
               </div>
-              <div className="text-2xl font-bold text-indigo-600">{systemStats.activeStaff}</div>
+              <div className="text-2xl font-bold text-indigo-600">
+                {loading ? "..." : systemStats.activeStaff}
+              </div>
             </div>
           </div>
 
@@ -619,11 +669,104 @@ class AdminDashboard extends React.Component {
                       📊 Export Report
                     </button>
                   </div>
-                  <div className="text-center py-12">
-                    <div className="text-4xl mb-4">📄</div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Applications Yet</h3>
-                    <p className="text-gray-500">Applications will appear here once users start submitting them.</p>
-                  </div>
+
+                  {/* Applications Table */}
+                  {this.state.applications.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white border border-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Application ID
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Vehicle Details
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Transfer Details
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Submitted Date
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {this.state.applications.map((app) => (
+                            <tr key={app.id}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">#{app.id}</div>
+                                <div className="text-sm text-gray-500">
+                                  {app.courtOrderRequired ? '⚖️ Court Order Required' : '📄 Standard Process'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {app.vehicleMake || 'Unknown'} {app.vehicleModel || 'Model'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  Plate: {app.vehiclePlateNumber || 'Unknown'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  <span className="font-medium">From:</span> {app.currentOwner || 'Unknown'}
+                                </div>
+                                <div className="text-sm text-gray-900">
+                                  <span className="font-medium">To:</span> {app.newOwner || 'Unknown'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  Submitted by: {app.submittedBy || app.applicantName || 'Unknown'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${this.getApplicationStatusColor(app.status)}`}>
+                                  {(app.status || 'pending').replace('_', ' ').toUpperCase()}
+                                </span>
+                                {app.paymentStatus && (
+                                  <div className="mt-1">
+                                    <span className={`px-2 py-1 text-xs font-medium rounded ${this.getPaymentStatusColor(app.paymentStatus)}`}>
+                                      💳 {app.paymentStatus.toUpperCase()}
+                                    </span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {new Date(app.submittedDate || Date.now()).toLocaleDateString()}
+                                <div className="text-xs text-gray-500">
+                                  {new Date(app.submittedDate || Date.now()).toLocaleTimeString()}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                <button className="text-blue-600 hover:text-blue-900">
+                                  👁️ View Details
+                                </button>
+                                <button className="text-green-600 hover:text-green-900">
+                                  📥 Download
+                                </button>
+                                {app.status === 'approved' && (
+                                  <button className="text-purple-600 hover:text-purple-900">
+                                    🆔 Generate Card
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-4xl mb-4">📄</div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Applications Yet</h3>
+                      <p className="text-gray-500">Applications will appear here once users start submitting them.</p>
+                    </div>
+                  )}
                 </div>
               )}
 

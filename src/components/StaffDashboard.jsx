@@ -4,7 +4,7 @@
 import React from "react"
 import { Link } from "react-router-dom"
 import AuthContext from "../context/AuthContext"
-import { getAllApplications, updateApplicationStatus } from "../utils/api"
+import { getAllApplications, updateApplicationStatus, generateOwnershipCard } from "../utils/api"
 
 class StaffDashboard extends React.Component {
   static contextType = AuthContext
@@ -30,20 +30,28 @@ class StaffDashboard extends React.Component {
   loadApplications = async () => {
     try {
       const response = await getAllApplications()
+      console.log('Staff applications loaded:', response.data)
+      
       const applications = response.data.map(app => ({
         id: app.id,
-        applicantName: app.applicantName,
-        vehiclePlate: app.vehiclePlateNumber,
-        vehicleMake: app.vehicleMake,
-        vehicleModel: app.vehicleModel,
-        currentOwner: app.currentOwner,
-        newOwner: app.newOwner,
-        status: app.status,
-        submittedDate: app.submittedDate,
-        paymentStatus: app.paymentStatus,
-        courtOrderRequired: app.courtOrderRequired,
+        applicantName: app.submittedBy || app.applicantName || 'Unknown',
+        vehiclePlate: app.vehiclePlateNumber || 'Unknown',
+        vehicleMake: app.vehicleMake || 'Unknown',
+        vehicleModel: app.vehicleModel || 'Unknown',
+        currentOwner: app.currentOwner || 'Unknown',
+        newOwner: app.newOwner || 'Unknown',
+        status: app.status?.toLowerCase() || 'pending',
+        submittedDate: app.submittedDate || new Date().toISOString(),
+        paymentStatus: app.paymentStatus || 'pending',
+        courtOrderRequired: app.courtOrderRequired || false,
         priority: app.courtOrderRequired ? 'high' : 'medium',
-        lastUpdated: new Date().toLocaleString()
+        lastUpdated: app.lastUpdated || new Date().toLocaleString(),
+        // Enhanced fields for display
+        asset: `${app.vehicleMake || 'Unknown'} ${app.vehicleModel || 'Model'} - ${app.vehiclePlateNumber || 'Unknown'}`,
+        applicant: app.submittedBy || app.applicantName || 'Unknown',
+        date: app.submittedDate || new Date().toISOString(),
+        assignedTo: 'Staff Member', // Default assignment
+        type: 'Vehicle' // Default type
       }))
       
       this.setState({
@@ -52,46 +60,91 @@ class StaffDashboard extends React.Component {
         error: ""
       })
     } catch (err) {
+      console.error('Failed to load applications:', err)
       this.setState({
-        error: "Failed to load applications",
+        error: `Failed to load applications: ${err.message}`,
         loading: false,
         applications: []
       })
     }
   }
 
-  // Update application status
-  updateApplicationStatus = (applicationId, newStatus) => {
-    this.setState((prevState) => ({
-      applications: prevState.applications.map((app) =>
-        app.id === applicationId
-          ? { ...app, status: newStatus, lastUpdated: new Date().toLocaleString() }
-          : app
-      ),
-      success: `Application ${applicationId} status updated to ${newStatus.replace("_", " ")}`,
-    }))
-    setTimeout(() => this.setState({ success: "" }), 3000)
+  // Update application status with backend API call
+  updateApplicationStatus = async (applicationId, newStatus, reviewNotes = '') => {
+    try {
+      // Call backend API to update status
+      await updateApplicationStatus(applicationId, newStatus, reviewNotes)
+      
+      // Update local state
+      this.setState((prevState) => ({
+        applications: prevState.applications.map((app) =>
+          app.id === applicationId
+            ? { ...app, status: newStatus, lastUpdated: new Date().toLocaleString() }
+            : app
+        ),
+        success: `Application ${applicationId} status updated to ${newStatus.replace("_", " ")}`,
+      }))
+      
+      setTimeout(() => this.setState({ success: "" }), 3000)
+      
+    } catch (error) {
+      console.error('Failed to update application status:', error)
+      this.setState({
+        error: `Failed to update status: ${error.message}`,
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
+  }
+
+  // Generate ownership card for approved applications
+  generateNewCard = async (applicationId) => {
+    try {
+      this.setState({ loading: true })
+      
+      const response = await generateOwnershipCard(applicationId)
+      
+      this.setState({
+        loading: false,
+        success: `New ownership card generated successfully for application ${applicationId}!`,
+      })
+      
+      setTimeout(() => this.setState({ success: "" }), 5000)
+      
+    } catch (error) {
+      console.error('Failed to generate ownership card:', error)
+      this.setState({
+        loading: false,
+        error: `Failed to generate ownership card: ${error.message}`,
+      })
+      setTimeout(() => this.setState({ error: "" }), 5000)
+    }
   }
 
   // Quick status update functions
-  handleQuickApprove = (applicationId) => {
-    if (window.confirm("Are you sure you want to approve this application?")) {
-      this.updateApplicationStatus(applicationId, "approved")
+  handleQuickApprove = async (applicationId) => {
+    if (window.confirm("Are you sure you want to approve this application? This will generate a new ownership card.")) {
+      await this.updateApplicationStatus(applicationId, "approved", "Application approved by staff")
+      
+      // Automatically generate ownership card for approved applications
+      setTimeout(() => {
+        this.generateNewCard(applicationId)
+      }, 1000)
     }
   }
 
-  handleQuickReject = (applicationId) => {
-    if (window.confirm("Are you sure you want to reject this application?")) {
-      this.updateApplicationStatus(applicationId, "rejected")
+  handleQuickReject = async (applicationId) => {
+    const reason = window.prompt("Please provide a reason for rejection:")
+    if (reason !== null) {
+      await this.updateApplicationStatus(applicationId, "rejected", reason || "Application rejected by staff")
     }
   }
 
-  handleMarkUnderReview = (applicationId) => {
-    this.updateApplicationStatus(applicationId, "under_review")
+  handleMarkUnderReview = async (applicationId) => {
+    await this.updateApplicationStatus(applicationId, "under_review", "Application moved to under review")
   }
 
-  handleMarkPending = (applicationId) => {
-    this.updateApplicationStatus(applicationId, "pending")
+  handleMarkPending = async (applicationId) => {
+    await this.updateApplicationStatus(applicationId, "pending", "Application moved back to pending")
   }
 
   // Filter and sort functions
@@ -394,7 +447,10 @@ class StaffDashboard extends React.Component {
                         <div>
                           <h4 className="font-medium text-gray-900">{app.asset}</h4>
                           <p className="text-sm text-gray-500">
-                            Application ID: {app.id} • Applicant: {app.applicant}
+                            Application ID: {app.id} • Submitted by: {app.applicant}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Transfer: {app.currentOwner} → {app.newOwner}
                           </p>
                           <p className="text-xs text-gray-400">
                             Last updated: {app.lastUpdated} • Assigned to: {app.assignedTo}
@@ -410,11 +466,16 @@ class StaffDashboard extends React.Component {
                         <span className={`px-2 py-1 rounded text-xs font-medium ${this.getStatusColor(app.status)}`}>
                           {app.status.replace("_", " ")}
                         </span>
-                        {app.payment && (
+                        {app.courtOrderRequired && (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                            ⚖️ Court Order Required
+                          </span>
+                        )}
+                        {app.paymentStatus && (
                           <span
-                            className={`px-2 py-1 rounded text-xs font-medium ${this.getPaymentStatusColor(app.payment.status)}`}
+                            className={`px-2 py-1 rounded text-xs font-medium ${this.getPaymentStatusColor(app.paymentStatus)}`}
                           >
-                            💳 {app.payment.status}
+                            💳 {app.paymentStatus}
                           </span>
                         )}
                       </div>
@@ -425,9 +486,14 @@ class StaffDashboard extends React.Component {
                         <span className="text-sm text-gray-500">
                           Submitted: {new Date(app.date).toLocaleDateString()}
                         </span>
-                        {app.payment && (
+                        {app.paymentStatus && (
                           <span className="text-sm text-gray-500 ml-4">
-                            💳 Payment: ${app.payment.amount} via {app.payment.method.replace("_", " ")}
+                            💳 Payment Status: {app.paymentStatus}
+                          </span>
+                        )}
+                        {app.courtOrderRequired && (
+                          <span className="text-sm text-orange-600 ml-4">
+                            ⚖️ Court Order Required
                           </span>
                         )}
                       </div>
@@ -481,12 +547,22 @@ class StaffDashboard extends React.Component {
                         )}
 
                         {(app.status === "approved" || app.status === "rejected") && (
-                          <button
-                            onClick={() => this.handleMarkPending(app.id)}
-                            className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200"
-                          >
-                            🔄 Reopen
-                          </button>
+                          <>
+                            <button
+                              onClick={() => this.handleMarkPending(app.id)}
+                              className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200"
+                            >
+                              🔄 Reopen
+                            </button>
+                            {app.status === "approved" && (
+                              <button
+                                onClick={() => this.generateNewCard(app.id)}
+                                className="px-3 py-1 bg-purple-100 text-purple-800 rounded text-xs hover:bg-purple-200"
+                              >
+                                🆔 Generate Card
+                              </button>
+                            )}
+                          </>
                         )}
 
                         <Link

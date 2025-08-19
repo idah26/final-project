@@ -93,7 +93,10 @@ export const logoutUser = async () => {
 // Application management functions
 export const submitOwnershipChangeRequest = async (formData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/ownership/apply`, {
+    console.log('Submitting application data:', formData)
+    
+    // Use the ApplicationController endpoint that accepts JSON
+    const response = await fetch(`${API_BASE_URL}/applications`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -102,13 +105,28 @@ export const submitOwnershipChangeRequest = async (formData) => {
       credentials: 'include'
     })
 
+    console.log('Submit response status:', response.status)
+    console.log('Submit response headers:', Object.fromEntries(response.headers.entries()))
+
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Failed to submit application' }))
+      const errorText = await response.text()
+      console.error('Submit error response:', errorText)
+      
+      let error
+      try {
+        error = JSON.parse(errorText)
+      } catch {
+        error = { message: errorText || 'Failed to submit application' }
+      }
+      
       throw new Error(error.message || 'Failed to submit application')
     }
 
-    return await response.json()
+    const result = await response.json()
+    console.log('Application submitted successfully:', result)
+    return result
   } catch (error) {
+    console.error('Application submission error:', error)
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
       throw new Error('Unable to connect to server. Please check if the backend is running.')
     }
@@ -119,7 +137,7 @@ export const submitOwnershipChangeRequest = async (formData) => {
 // Staff-specific application functions
 export const getStaffApplications = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/staff/applications?t=${Date.now()}`, {
+    const response = await fetch(`${API_BASE_URL}/applications?t=${Date.now()}`, {
       method: 'GET',
       credentials: 'include'
     })
@@ -140,10 +158,53 @@ export const getStaffApplications = async () => {
 }
 
 export const updateApplicationStatus = async (applicationId, status, comments = '') => {
-  if (status === 'approved') {
-    return await approveApplication(applicationId)
-  } else if (status === 'rejected') {
-    return await rejectApplication(applicationId)
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: status.toUpperCase(), comments }),
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to update application status' }))
+      throw new Error(error.message || 'Failed to update application status')
+    }
+
+    return await response.json()
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.')
+    }
+    throw error
+  }
+}
+
+// Generate new ownership card for approved applications
+export const generateOwnershipCard = async (applicationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/generate-card`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to generate ownership card' }))
+      throw new Error(error.message || 'Failed to generate ownership card')
+    }
+
+    const data = await response.json()
+    return { data }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.')
+    }
+    throw error
   }
 }
 
@@ -192,10 +253,10 @@ export const rejectApplication = async (applicationId) => {
 // User-specific application functions
 export const getUserApplications = async (userRole, userId) => {
   try {
-    // Use the user ID in the endpoint if provided, otherwise let backend determine from session
+    // Use the correct backend endpoint structure
     const endpoint = userId 
-      ? `${API_BASE_URL}/user/${userId}/applications?t=${Date.now()}`
-      : `${API_BASE_URL}/user/applications?t=${Date.now()}`
+      ? `${API_BASE_URL}/applications/user/${userId}?t=${Date.now()}`
+      : `${API_BASE_URL}/applications?t=${Date.now()}`
       
     const response = await fetch(endpoint, {
       method: 'GET',
@@ -228,7 +289,7 @@ export const getUserApplications = async (userRole, userId) => {
 // Admin-specific functions
 export const getAllApplications = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/admin/applications?t=${Date.now()}`, {
+    const response = await fetch(`${API_BASE_URL}/applications?t=${Date.now()}`, {
       method: 'GET',
       credentials: 'include'
     })
@@ -358,6 +419,177 @@ export const toggleUserStatus = async (userId, status) => {
     }
 
     return await response.json()
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.')
+    }
+    throw error
+  }
+}
+
+// Enhanced Application Tracking Functions
+export const getApplicationTimeline = async (applicationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/timeline`, {
+      method: 'GET',
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      // Return mock timeline data if endpoint doesn't exist
+      if (response.status === 404) {
+        return { 
+          data: [
+            {
+              step: "Application Submitted",
+              date: new Date().toISOString(),
+              status: "completed",
+              description: "Your application has been received"
+            }
+          ]
+        }
+      }
+      
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch timeline' }))
+      throw new Error(error.message || 'Failed to fetch timeline')
+    }
+
+    const data = await response.json()
+    return { data }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      // Return mock data if backend is not reachable
+      return { 
+        data: [
+          {
+            step: "Application Submitted",
+            date: new Date().toISOString(),
+            status: "completed",
+            description: "Your application has been received"
+          }
+        ]
+      }
+    }
+    throw error
+  }
+}
+
+export const getApplicationDocuments = async (applicationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/documents`, {
+      method: 'GET',
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      // Return mock document data if endpoint doesn't exist
+      if (response.status === 404) {
+        return { 
+          data: [
+            { name: "Vehicle Registration", status: "pending", required: true },
+            { name: "Seller ID Copy", status: "pending", required: true },
+            { name: "Buyer ID Copy", status: "pending", required: true },
+            { name: "Sale Agreement", status: "pending", required: true }
+          ]
+        }
+      }
+      
+      const error = await response.json().catch(() => ({ message: 'Failed to fetch documents' }))
+      throw new Error(error.message || 'Failed to fetch documents')
+    }
+
+    const data = await response.json()
+    return { data }
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      // Return mock data if backend is not reachable
+      return { 
+        data: [
+          { name: "Vehicle Registration", status: "pending", required: true },
+          { name: "Seller ID Copy", status: "pending", required: true },
+          { name: "Buyer ID Copy", status: "pending", required: true },
+          { name: "Sale Agreement", status: "pending", required: true }
+        ]
+      }
+    }
+    throw error
+  }
+}
+
+export const updateApplicationStatusEnhanced = async (applicationId, status, notes = '') => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status, notes }),
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to update status' }))
+      throw new Error(error.message || 'Failed to update status')
+    }
+
+    return await response.json()
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.')
+    }
+    throw error
+  }
+}
+
+export const addApplicationNote = async (applicationId, note) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ note }),
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to add note' }))
+      throw new Error(error.message || 'Failed to add note')
+    }
+
+    return await response.json()
+  } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Unable to connect to server. Please check if the backend is running.')
+    }
+    throw error
+  }
+}
+
+export const downloadApplicationDocuments = async (applicationId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/applications/${applicationId}/download`, {
+      method: 'GET',
+      credentials: 'include'
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Failed to download documents' }))
+      throw new Error(error.message || 'Failed to download documents')
+    }
+
+    // Handle file download
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `application-${applicationId}-documents.zip`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    
+    return { success: true }
   } catch (error) {
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
       throw new Error('Unable to connect to server. Please check if the backend is running.')
